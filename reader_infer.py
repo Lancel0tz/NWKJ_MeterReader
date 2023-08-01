@@ -22,6 +22,7 @@ import argparse
 
 from paddlex import transforms as T
 import paddlex as pdx
+import custom_det
 
 # 读数后处理中有把圆形表盘转成矩形的操作，矩形的宽即为圆形的外周长
 # 因此要求表盘图像大小为固定大小，这里设置为[512, 512]
@@ -44,19 +45,19 @@ RECTANGLE_WIDTH = 1570
 TYPE_THRESHOLD = 40
 # 两种表盘的配置信息，包含每根刻度的值，量程，单位
 METER_CONFIG = [{
-    'type_threshold': 50,
-    'scale_interval_value': 25.0 / 50.0,
-    'range': 25.0,
+    'meter_type': 'squaremeter',
+    'scale_interval_value':  450.0 / 45.0,
+    'range': 450.0,
     'unit': "(MPa)"
 },
     {
-    'scale_interval_value': 1.6 / 32.0,
-    'range': 1.6,
-    'unit': "(MPa)"},
+    'meter_type': 'roundmeter',
+    'scale_interval_value': 0.2 / 40.0,
+    'range': 0.2,
+    'unit': "(MPa)"}
 ]
 # 分割模型预测类别id与类别名的对应关系
 SEG_CNAME2CLSID = {'background': 0, 'pointer': 1, 'scale': 2}
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Meter Reader Infering')
@@ -180,6 +181,7 @@ class MeterReader:
         """
         filtered_results = list()
         for res in det_results:
+            print(res['score'])
             if res['score'] > score_threshold:
                 filtered_results.append(res)
         return filtered_results
@@ -424,7 +426,7 @@ class MeterReader:
             pointer_locations.append(location)
         return pointer_locations
 
-    def get_relative_location(self, scale_locations, pointer_locations):
+    def get_relative_location(self, scale_locations, pointer_locations, meter_types):
         """找到指针指向了第几根刻度
 
         参数：
@@ -439,8 +441,8 @@ class MeterReader:
         """
 
         pointed_scales = list()
-        for scale_location, pointer_location in zip(scale_locations,
-                                                    pointer_locations):
+        for scale_location, pointer_location , meter_type in zip(scale_locations,
+                                                    pointer_locations, meter_types):
             num_scales = len(scale_location)
             pointed_scale = -1
             if num_scales > 0:
@@ -452,7 +454,7 @@ class MeterReader:
                             pointer_location - scale_location[i]
                         ) / (scale_location[i + 1] - scale_location[i] + 1e-05
                              ) + 1
-            result = {'num_scales': num_scales, 'pointed_scale': pointed_scale}
+            result = {'num_scales': num_scales, 'pointed_scale': pointed_scale, 'meter_type':meter_type}
             pointed_scales.append(result)
         return pointed_scales
 
@@ -464,8 +466,11 @@ class MeterReader:
         for i in range(batch_size):
             pointed_scale = pointed_scales[i]
             # 刻度根数大于阈值的为第一种表盘
-            if pointed_scale['num_scales'] > TYPE_THRESHOLD:
+            if pointed_scale['meter_type'] == 'squaremeter':
                 reading = pointed_scale['pointed_scale'] * METER_CONFIG[0][
+                        'scale_interval_value']
+            elif pointed_scale['meter_type'] == 'roundmeter':
+                reading = pointed_scale['pointed_scale'] * METER_CONFIG[1][
                     'scale_interval_value']
             else:
                 reading = pointed_scale['pointed_scale'] * METER_CONFIG[1][
@@ -474,7 +479,7 @@ class MeterReader:
 
         return readings
 
-    def get_meter_reading(self, seg_results):
+    def get_meter_reading(self,det_results, seg_results):
         """对分割结果进行读数后处理得到各表盘的读数
 
         参数：
@@ -484,6 +489,17 @@ class MeterReader:
             meter_readings (list[dcit]): 各表盘的读数。
 
         """
+        meter_types = list()
+        for res in det_results:
+            meter_type = 'unknown'
+            print(res)
+            if res['category'] == 'roundmeter':
+                meter_type = 'roundmeter'
+            elif res['category'] == 'squaremeter':
+                meter_type = 'squaremeter'
+            else:
+                meter_type = 'meter'
+            meter_types.append(meter_type)
 
         rectangle_meters = self.circle_to_rectangle(seg_results)
         line_scales, line_pointers = self.rectangle_to_line(rectangle_meters)
@@ -492,9 +508,13 @@ class MeterReader:
         scale_locations = self.locate_scale(binaried_scales)
         pointer_locations = self.locate_pointer(binaried_pointers)
         pointed_scales = self.get_relative_location(scale_locations,
-                                                    pointer_locations)
+                                                    pointer_locations,meter_types)
         meter_readings = self.calculate_reading(pointed_scales)
-        return meter_readings
+
+        for i in range(len(meter_readings)):
+            print("Meter {}: Type={}, Reading={}".format(i + 1, meter_types[i], meter_readings[i]))
+
+        return meter_readings, meter_types
 
     def print_meter_readings(self, meter_readings):
         """打印各表盘的读数
@@ -505,7 +525,7 @@ class MeterReader:
         for i in range(len(meter_readings)):
             print("Meter {}: {}".format(i + 1, meter_readings[i]))
 
-    def visualize(self, img, det_results, meter_readings, save_dir="./"):
+    def visualize(self, img, det_results, meter_readings, meter_types, save_dir="./"):
         """可视化图像中各表盘的位置和读数
 
         参数：
@@ -519,15 +539,17 @@ class MeterReader:
         for i, res in enumerate(det_results):
             # 将检测结果中的关键词`score`替换成读数，就可以调用pdx.det.visualize画图了
             res['score'] = meter_readings[i]
+            res['category'] = meter_types[i]
+            print(res)
             vis_results.append(res)
         # 检测结果可视化时会滤除score低于threshold的框，这里读数都是>=-1的，所以设置thresh=-1
-        pdx.det.visualize(img, vis_results, threshold=-1, save_dir=save_dir)
+        custom_det.visualize(img, vis_results, threshold=-20, save_dir=save_dir)
 
     def predict(self,
                 img_file,
                 save_dir='./',
                 use_erode=True,
-                erode_kernel=4,
+                erode_kernel=2,
                 score_threshold=0.5,
                 seg_batch_size=2):
         """检测图像中的表盘，而后分割出各表盘中的指针和刻度，对分割结果进行读数后处理后得到各表盘的读数。
@@ -544,14 +566,15 @@ class MeterReader:
         img = self.decode(img_file)
         det_results = self.detector.predict(img)
         filtered_results = self.filter_bboxes(det_results, score_threshold)
+        print(filtered_results)
         sub_imgs = self.roi_crop(img, filtered_results)
         sub_imgs = self.resize(sub_imgs, METER_SHAPE)
         seg_results = self.seg_predict(self.segmenter, sub_imgs,
                                        seg_batch_size)
         seg_results = self.erode(seg_results, erode_kernel)
-        meter_readings = self.get_meter_reading(seg_results)
+        meter_readings, meter_types = self.get_meter_reading(filtered_results, seg_results)
         self.print_meter_readings(meter_readings)
-        self.visualize(img, filtered_results, meter_readings, save_dir)
+        self.visualize(img, filtered_results, meter_readings, meter_types, save_dir)
 
 
 def infer(args):
