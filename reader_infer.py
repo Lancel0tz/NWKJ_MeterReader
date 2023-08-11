@@ -48,7 +48,7 @@ METER_CONFIG = [{
     'meter_type': 'squaremeter',
     'scale_interval_value':  450.0 / 45.0,
     'range': 450.0,
-    'unit': "(MPa)"
+    'unit': "(V)"
 },
     {# 红绿压力计
     'meter_type': 'roundmeter',
@@ -74,6 +74,7 @@ METER_CONFIG = [{
     'range': 25.0,
     'unit': "(MPa)"
 }
+
 ]
 # 分割模型预测类别id与类别名的对应关系
 SEG_CNAME2CLSID = {'background': 0, 'pointer': 1, 'scale': 2}
@@ -169,7 +170,9 @@ class MeterReader:
             raise Exception("Model path {} does not exist".format(
                 seg_model_dir))
         self.detector = pdx.load_model(det_model_dir)
-        self.segmenter = pdx.load_model(seg_model_dir)
+        self.seg_model_dir = seg_model_dir
+        seg_model_path = os.path.join(seg_model_dir, "roundmeter")
+        self.segmenter = pdx.load_model(seg_model_path)
 
     def decode(self, img_file):
         """图像解码
@@ -251,7 +254,7 @@ class MeterReader:
             resized_imgs.append(resize_img)
         return resized_imgs
 
-    def seg_predict(self, segmenter, imgs, batch_size):
+    def seg_predict(self, imgs, batch_size, det_results):
         """分割模型完成预测
 
         参数：
@@ -266,8 +269,14 @@ class MeterReader:
         seg_results = list()
         num_imgs = len(imgs)
         for i in range(0, num_imgs, batch_size):
+            det_result = det_results[i]["category"]
             batch = imgs[i:min(num_imgs, i + batch_size)]
-            result = segmenter.predict(batch)
+            if det_result == "roundmeter":
+                result = self.segmenter.predict(batch)
+            elif det_result == "squaremeter":
+                seg_model_path = os.path.join(self.seg_model_dir, "squaremeter")
+                self.segmenter = pdx.load_model(seg_model_path)
+                result = self.segmenter.predict(batch)
             seg_results.extend(result)
         return seg_results
 
@@ -282,7 +291,7 @@ class MeterReader:
             eroded_results (list[dict])：对label_map进行腐蚀后的分割模型预测结果。
 
         """
-        kernel = np.ones((3, 3), np.uint8)
+        kernel = np.ones((erode_kernel,erode_kernel), np.uint8)
         eroded_results = seg_results
         for i in range(len(seg_results)):
             eroded_results[i]['label_map'] = cv2.erode(
@@ -322,8 +331,7 @@ class MeterReader:
                     rho = CIRCLE_RADIUS - row - 1
                     y = int(CIRCLE_CENTER[0] + rho * math.cos(theta) + 0.5)
                     x = int(CIRCLE_CENTER[1] - rho * math.sin(theta) + 0.5)
-                    if 0 <= x < label_map.shape[1] and 0 <= y < label_map.shape[0]:
-                        rectangle_meter[row, col] = label_map[y, x]
+                    rectangle_meter[row, col] = label_map[y, x]
             rectangle_meters.append(rectangle_meter)
         return rectangle_meters
 
@@ -485,11 +493,14 @@ class MeterReader:
         batch_size = len(pointed_scales)
         for i in range(batch_size):
             pointed_scale = pointed_scales[i]
+            print("pointed_scale")
             print(pointed_scale)
             if pointed_scale['meter_type'] == 'squaremeter':
                 reading = pointed_scale['pointed_scale'] * METER_CONFIG[0][
-                    'scale_interval_value']
+                        'scale_interval_value']
             elif pointed_scale['meter_type'] == 'roundmeter':
+                reading = pointed_scale['pointed_scale'] * METER_CONFIG[1][
+                    'scale_interval_value']
                 if pointed_scale['num_scales'] == 10:
                     reading = pointed_scale['pointed_scale'] * METER_CONFIG[2][
                         'scale_interval_value']
@@ -499,11 +510,6 @@ class MeterReader:
                 elif pointed_scale['num_scales'] == 50:
                     reading = pointed_scale['pointed_scale'] * METER_CONFIG[4][
                         'scale_interval_value']
-                else: # 红绿压力计 37 35<=x<=40
-                    reading = pointed_scale['pointed_scale'] * METER_CONFIG[1][
-                        'scale_interval_value']
-                    if reading <= METER_CONFIG[1]["range"]*1/2:
-                        reading -= 0.1
             else:
                 reading = pointed_scale['pointed_scale'] * METER_CONFIG[2][
                     'scale_interval_value']
@@ -618,8 +624,8 @@ class MeterReader:
         print(filtered_results)
         sub_imgs = self.roi_crop(img, filtered_results)
         sub_imgs = self.resize(sub_imgs, METER_SHAPE)
-        seg_results = self.seg_predict(self.segmenter, sub_imgs,
-                                       seg_batch_size)
+        seg_results = self.seg_predict(sub_imgs,
+                                       seg_batch_size, filtered_results)
         seg_results = self.erode(seg_results, erode_kernel)
         meter_readings, meter_types = self.get_meter_reading(filtered_results, seg_results)
         self.print_meter_readings(meter_readings)
