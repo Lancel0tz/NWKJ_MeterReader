@@ -36,7 +36,7 @@ PI = 3.1415926536
 # 在把圆形表盘转成矩形后矩形的高
 # 当前设置值约为半径的一半，原因是：圆形表盘的中心区域除了指针根部就是背景了
 # 我们只需要把外围的刻度、指针的尖部保存下来就可以定位出指针指向的刻度
-RECTANGLE_HEIGHT = 120
+RECTANGLE_HEIGHT = 150
 # 矩形表盘的宽，即圆形表盘的外周长
 RECTANGLE_WIDTH = 1570
 # 当前案例中只使用了两种类型的表盘，第一种表盘的刻度根数为50
@@ -50,11 +50,30 @@ METER_CONFIG = [{
     'range': 450.0,
     'unit': "(MPa)"
 },
-    {
+    {# 红绿压力计
     'meter_type': 'roundmeter',
     'scale_interval_value': 0.2 / 40.0,
     'range': 0.2,
-    'unit': "(MPa)"}
+    'unit': "(MPa)"},
+
+    {# 油位计
+    'meter_type': 'roundmeter',
+    'scale_interval_value': 10.0 / 10.0,
+    'range': 10.0,
+    'unit': "(V/A)"},
+
+    {# 压力表 2500
+    'meter_type': 'roundmeter',
+    'scale_interval_value': 2500 / 50.0,
+    'range': 2500,
+    'unit': "(kPag)"},
+
+    {# 压力表 25
+    'type_threshold': 50,
+    'scale_interval_value': 25.0 / 50.0,
+    'range': 25.0,
+    'unit': "(MPa)"
+}
 ]
 # 分割模型预测类别id与类别名的对应关系
 SEG_CNAME2CLSID = {'background': 0, 'pointer': 1, 'scale': 2}
@@ -93,7 +112,7 @@ def parse_args():
         dest='erode_kernel',
         help='Erode kernel size',
         type=int,
-        default=4)
+        default=3)
     parser.add_argument(
         '--save_dir',
         dest='save_dir',
@@ -263,7 +282,7 @@ class MeterReader:
             eroded_results (list[dict])：对label_map进行腐蚀后的分割模型预测结果。
 
         """
-        kernel = np.ones((erode_kernel, erode_kernel), np.uint8)
+        kernel = np.ones((3, 3), np.uint8)
         eroded_results = seg_results
         for i in range(len(seg_results)):
             eroded_results[i]['label_map'] = cv2.erode(
@@ -303,7 +322,8 @@ class MeterReader:
                     rho = CIRCLE_RADIUS - row - 1
                     y = int(CIRCLE_CENTER[0] + rho * math.cos(theta) + 0.5)
                     x = int(CIRCLE_CENTER[1] - rho * math.sin(theta) + 0.5)
-                    rectangle_meter[row, col] = label_map[y, x]
+                    if 0 <= x < label_map.shape[1] and 0 <= y < label_map.shape[0]:
+                        rectangle_meter[row, col] = label_map[y, x]
             rectangle_meters.append(rectangle_meter)
         return rectangle_meters
 
@@ -465,15 +485,27 @@ class MeterReader:
         batch_size = len(pointed_scales)
         for i in range(batch_size):
             pointed_scale = pointed_scales[i]
-            # 刻度根数大于阈值的为第一种表盘
+            print(pointed_scale)
             if pointed_scale['meter_type'] == 'squaremeter':
                 reading = pointed_scale['pointed_scale'] * METER_CONFIG[0][
-                        'scale_interval_value']
-            elif pointed_scale['meter_type'] == 'roundmeter':
-                reading = pointed_scale['pointed_scale'] * METER_CONFIG[1][
                     'scale_interval_value']
+            elif pointed_scale['meter_type'] == 'roundmeter':
+                if pointed_scale['num_scales'] == 10:
+                    reading = pointed_scale['pointed_scale'] * METER_CONFIG[2][
+                        'scale_interval_value']
+                elif pointed_scale['num_scales'] == 50:
+                    reading = pointed_scale['pointed_scale'] * METER_CONFIG[3][
+                        'scale_interval_value']
+                elif pointed_scale['num_scales'] == 50:
+                    reading = pointed_scale['pointed_scale'] * METER_CONFIG[4][
+                        'scale_interval_value']
+                else: # 红绿压力计 37 35<=x<=40
+                    reading = pointed_scale['pointed_scale'] * METER_CONFIG[1][
+                        'scale_interval_value']
+                    if reading <= METER_CONFIG[1]["range"]*1/2:
+                        reading -= 0.1
             else:
-                reading = pointed_scale['pointed_scale'] * METER_CONFIG[1][
+                reading = pointed_scale['pointed_scale'] * METER_CONFIG[2][
                     'scale_interval_value']
             readings.append(reading)
 
@@ -502,11 +534,28 @@ class MeterReader:
             meter_types.append(meter_type)
 
         rectangle_meters = self.circle_to_rectangle(seg_results)
+        print("----------")
+        print(rectangle_meters)
         line_scales, line_pointers = self.rectangle_to_line(rectangle_meters)
+        print("line scales")
+        print(line_scales)
+        print(np.max(line_scales))
+        print("line pointer")
+        print(line_pointers)
+        print(np.max(line_pointers))
         binaried_scales = self.mean_binarization(line_scales)
+        print("binary scales")
+        print(binaried_scales)
         binaried_pointers = self.mean_binarization(line_pointers)
+
+        print("binary pointer")
+        print(binaried_pointers)
         scale_locations = self.locate_scale(binaried_scales)
+        print("----------")
+        print(scale_locations)
         pointer_locations = self.locate_pointer(binaried_pointers)
+        print("----------")
+        print(pointer_locations)
         pointed_scales = self.get_relative_location(scale_locations,
                                                     pointer_locations,meter_types)
         meter_readings = self.calculate_reading(pointed_scales)
@@ -549,7 +598,7 @@ class MeterReader:
                 img_file,
                 save_dir='./',
                 use_erode=True,
-                erode_kernel=4,
+                erode_kernel=3,
                 score_threshold=0.5,
                 seg_batch_size=2):
         """检测图像中的表盘，而后分割出各表盘中的指针和刻度，对分割结果进行读数后处理后得到各表盘的读数。
