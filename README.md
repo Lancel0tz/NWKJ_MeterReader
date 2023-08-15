@@ -86,7 +86,7 @@ PaddleX提供了丰富的视觉模型，在目标检测中提供了RCNN和YOLO�
 python train_detection.py
 ```
 训练结束后，最优模型精度`bbox_mmap`达到99.81%：<br>
-<img src='/images/det_bbox.jpg' width="425" height="330"/>
+<img src='/images/det_bbox.jpg' width="425" height="330"/><br>
 平均精准率均值`mAP`达到99.82%，混淆矩阵如下图所示：<br>
 <img src='/images/det_matrix.jpg' width="400" height="330"/>
 
@@ -167,7 +167,7 @@ model.train(
 python train_segmentation.py
 ```
 训练结束后，最优模型精度`miou`达84.09。<br>
-<img src='/images/seg_miou.jpg' width="425" height="330"/>
+<img src='/images/seg_miou.jpg' width="425" height="330"/><br>
 平均精准率均值`mAcc`达到99.21%，混淆矩阵如下图所示：<br>
 <img src='/images/det_matrix.jpg' width="400" height="330"/>
 
