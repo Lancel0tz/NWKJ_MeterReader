@@ -27,10 +27,10 @@ import custom_det
 # 读数后处理中有把圆形表盘转成矩形的操作，矩形的宽即为圆形的外周长
 # 因此要求表盘图像大小为固定大小，这里设置为[512, 512]
 METER_SHAPE = [512, 512]  # 高x宽
-# 圆形表盘的中心点
-CIRCLE_CENTER = [256, 256]  # 高x宽
-# 圆形表盘的半径
-CIRCLE_RADIUS = 250
+# 圆形表盘的中心点 [380, 380]
+CIRCLE_CENTER = [415, 415]  # 高x宽
+# 圆形表盘的半径 [485]
+CIRCLE_RADIUS = 460
 # 圆周率
 PI = 3.1415926536
 # 在把圆形表盘转成矩形后矩形的高
@@ -331,7 +331,8 @@ class MeterReader:
                     rho = CIRCLE_RADIUS - row - 1
                     y = int(CIRCLE_CENTER[0] + rho * math.cos(theta) + 0.5)
                     x = int(CIRCLE_CENTER[1] - rho * math.sin(theta) + 0.5)
-                    rectangle_meter[row, col] = label_map[y, x]
+                    if y < METER_SHAPE[1] and x < METER_SHAPE[0]:
+                        rectangle_meter[row, col] = label_map[y, x]
             rectangle_meters.append(rectangle_meter)
         return rectangle_meters
 
@@ -613,7 +614,7 @@ class MeterReader:
             img_file (str)：待预测的图片路径。
             save_dir (str): 可视化结果的保存路径。
             use_erode (bool, optional): 是否对分割预测结果做图像腐蚀。默认值：True。
-            erode_kernel (int, optional): 图像腐蚀的卷积核大小。默认值: 4。
+            erode_kernel (int, optional): 图像腐蚀的卷积核大小。默认值: 3 。
             score_threshold (float, optional): 用于滤除检测框的置信度阈值。默认值：0.5。
             seg_batch_size (int, optional)：分割模型前向推理一次时输入表盘图像的批量大小。默认值为：2。
         """
