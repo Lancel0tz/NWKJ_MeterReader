@@ -4,7 +4,6 @@
 
 在电力能源厂区需要定期监测表计读数，以保证设备正常运行及厂区安全。但厂区分布分散，人工巡检耗时长，无法实时监测表计，且部分工作环境危险导致人工巡检无法触达。针对上述问题，希望通过摄像头拍照->智能读数的方式高效地完成此任务。
 
-本项目基于paddlex示例基础上进行升级创新，加入了通过表型的粗分类，以及表盘的细分类实现适配于多种表盘量程的表计模型，并具有灵活的可扩展性。
 为实现智能读数，我们采取目标检测->语义分割->读数后处理的方案：
 
 * 第一步，使用目标检测模型将表计按大类分类，并定位出图像中的表计；
@@ -167,8 +166,11 @@ model.train(
 ```shell
 python train_segmentation.py
 ```
-
 训练结束后，最优模型精度`miou`达84.09。
+<img src='/images/seg_miou.jpg' width="425" height="330"/>
+平均精准率均值`mAcc`达到99.21%，混淆矩阵如下图所示：
+<img src='/images/det_matrix.jpg' width="400" height="330"/>
+
 
 训练过程说明:
 
@@ -251,18 +253,20 @@ Meter 2: Type=roundmeter, Reading=-0.005
 预测结果如下：
 
 <div align="center">
-<img src="./images/visualize_1690944896474.jpg"  width = "400" />              </div>
+<img src="./images/visualize_1692084523583.jpg"  width = "400" />
+<img src="./images/visualize_1692080401439.jpg"  width = "400" />              </div>
+
 
 我们看下预测代码中的预测流程：
 
-图像解码 —> 检测表计 -> 过滤检测框 -> 提取检测框所在图像区域 -> 图像缩放 -> 指针和刻度分割 -> 读数后处理 -> 打印读数 -> 可视化预测结果
+图像解码 -> 检测表计 -> 过滤检测框 -> 提取检测框所在图像区域 -> 图像缩放 -> 指针和刻度分割 -> 读数后处理 -> 打印读数 -> 可视化预测结果
 
 ```python
 def predict(self,
             img_file,
             save_dir='./',
             use_erode=True,
-            erode_kernel=4,
+            erode_kernel=3,
             score_threshold=0.5,
             seg_batch_size=2):
 
@@ -280,7 +284,6 @@ def predict(self,
     img = self.decode(img_file)
     det_results = self.detector.predict(img)
     filtered_results = self.filter_bboxes(det_results, score_threshold)
-    print(filtered_results)
     sub_imgs = self.roi_crop(img, filtered_results)
     sub_imgs = self.resize(sub_imgs, METER_SHAPE)
     seg_results = self.seg_predict(self.segmenter, sub_imgs,
