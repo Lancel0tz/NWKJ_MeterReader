@@ -253,7 +253,7 @@ Meter 2: Type=roundmeter, Reading=-0.005
 预测结果如下：
 
 <div align="center">
-<img src="./images/visualize_1692084523583.jpg"  width = "400" />
+<img src="./images/visualize_1692084523583.jpg"  width = "400" /><br>
 <img src="./images/visualize_1692080401439.jpg"  width = "400" />              </div>
 
 
