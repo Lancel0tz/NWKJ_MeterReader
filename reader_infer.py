@@ -27,10 +27,10 @@ import custom_det
 # 读数后处理中有把圆形表盘转成矩形的操作，矩形的宽即为圆形的外周长
 # 因此要求表盘图像大小为固定大小，这里设置为[512, 512]
 METER_SHAPE = [512, 512]  # 高x宽
-# 圆形表盘的中心点 [380, 380]
-CIRCLE_CENTER = [415, 415]  # 高x宽
-# 圆形表盘的半径 [485]
-CIRCLE_RADIUS = 460
+# 圆形表盘的中心点
+CIRCLE_CENTER = [256, 256]  # 高x宽
+# 圆形表盘的半径
+CIRCLE_RADIUS = 250
 # 圆周率
 PI = 3.1415926536
 # 在把圆形表盘转成矩形后矩形的高
@@ -276,6 +276,7 @@ class MeterReader:
             elif det_result == "squaremeter":
                 seg_model_path = os.path.join(self.seg_model_dir, "squaremeter")
                 self.segmenter = pdx.load_model(seg_model_path)
+                self.setup(det_result)
                 result = self.segmenter.predict(batch)
             seg_results.extend(result)
         return seg_results
@@ -498,10 +499,8 @@ class MeterReader:
             print(pointed_scale)
             if pointed_scale['meter_type'] == 'squaremeter':
                 reading = pointed_scale['pointed_scale'] * METER_CONFIG[0][
-                        'scale_interval_value']
-            elif pointed_scale['meter_type'] == 'roundmeter':
-                reading = pointed_scale['pointed_scale'] * METER_CONFIG[1][
                     'scale_interval_value']
+            elif pointed_scale['meter_type'] == 'roundmeter':
                 if pointed_scale['num_scales'] == 10:
                     reading = pointed_scale['pointed_scale'] * METER_CONFIG[2][
                         'scale_interval_value']
@@ -511,6 +510,11 @@ class MeterReader:
                 elif pointed_scale['num_scales'] == 50:
                     reading = pointed_scale['pointed_scale'] * METER_CONFIG[4][
                         'scale_interval_value']
+                else: # 红绿压力计 37 35<=x<=40
+                    reading = pointed_scale['pointed_scale'] * METER_CONFIG[1][
+                        'scale_interval_value']
+                    if reading <= METER_CONFIG[1]["range"]*1/2:
+                        reading -= 0.1
             else:
                 reading = pointed_scale['pointed_scale'] * METER_CONFIG[2][
                     'scale_interval_value']
@@ -600,6 +604,13 @@ class MeterReader:
             vis_results.append(res)
         # 检测结果可视化时会滤除score低于threshold的框，这里读数都是>=-1的，所以设置thresh=-1
         custom_det.visualize(img, vis_results, threshold=-20, save_dir=save_dir)
+
+    def setup(self, det_result):
+        if det_result == "squaremeter":
+            CIRCLE_CENTER = [415, 415]  # 高x宽
+            # 方形表盘的半径
+            CIRCLE_RADIUS = 460
+
 
     def predict(self,
                 img_file,
