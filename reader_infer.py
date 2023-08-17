@@ -30,15 +30,10 @@ METER_SHAPE = [512, 512]  # 高x宽
 # 圆周率
 PI = 3.1415926536
 # 在把圆形表盘转成矩形后矩形的高
-# 当前设置值约为半径的一半，原因是：圆形表盘的中心区域除了指针根部就是背景了
 # 我们只需要把外围的刻度、指针的尖部保存下来就可以定位出指针指向的刻度
 RECTANGLE_HEIGHT = 150
 # 矩形表盘的宽，即圆形表盘的外周长
 RECTANGLE_WIDTH = 1570
-# 当前案例中只使用了两种类型的表盘，第一种表盘的刻度根数为50
-# 第二种表盘的刻度根数为32。因此，我们通过预测的刻度根数来判断表盘类型
-# 刻度根数超过阈值的即为第一种，否则是第二种
-TYPE_THRESHOLD = 40
 # 两种表盘的配置信息，包含每根刻度的值，量程，单位
 METER_CONFIG = [{
     'meter_type': 'squaremeter',
@@ -574,15 +569,6 @@ class MeterReader:
 
         return meter_readings, meter_types
 
-    def print_meter_readings(self, meter_readings):
-        """打印各表盘的读数
-
-        参数：
-            meter_readings (list[dict])：各表盘的读数
-        """
-        for i in range(len(meter_readings)):
-            print("Meter {}: {}".format(i + 1, meter_readings[i]))
-
     def visualize(self, img, det_results, meter_readings, meter_types, save_dir="./"):
         """可视化图像中各表盘的位置和读数
 
@@ -608,7 +594,9 @@ class MeterReader:
             self.CIRCLE_CENTER = [415, 415]  # 高x宽
             # 方形表盘的半径
             self.CIRCLE_RADIUS = 460
-
+        elif det_result == "roundmeter":
+            self.CIRCLE_CENTER = [256,256]
+            self.CIRCLE_RADIUS = 250
 
     def predict(self,
                 img_file,
@@ -632,13 +620,14 @@ class MeterReader:
         det_results = self.detector.predict(img)
         filtered_results = self.filter_bboxes(det_results, score_threshold)
         print(filtered_results)
+        if not filtered_results:
+            raise Exception("No meter is detected, please change another picture or view")
         sub_imgs = self.roi_crop(img, filtered_results)
         sub_imgs = self.resize(sub_imgs, METER_SHAPE)
         seg_results = self.seg_predict(sub_imgs,
                                        seg_batch_size, filtered_results)
         seg_results = self.erode(seg_results, erode_kernel)
         meter_readings, meter_types = self.get_meter_reading(filtered_results, seg_results)
-        self.print_meter_readings(meter_readings)
         self.visualize(img, filtered_results, meter_readings, meter_types, save_dir)
 
 
