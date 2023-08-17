@@ -25,12 +25,8 @@ import paddlex as pdx
 import custom_det
 
 # 读数后处理中有把圆形表盘转成矩形的操作，矩形的宽即为圆形的外周长
-# 因此要求表盘图像大小为固定大小，这里设置为[512, 512]
+# 圆形表盘图像大小为固定大小，这里设置为[512, 512]
 METER_SHAPE = [512, 512]  # 高x宽
-# 圆形表盘的中心点
-CIRCLE_CENTER = [256, 256]  # 高x宽
-# 圆形表盘的半径
-CIRCLE_RADIUS = 250
 # 圆周率
 PI = 3.1415926536
 # 在把圆形表盘转成矩形后矩形的高
@@ -173,6 +169,8 @@ class MeterReader:
         self.seg_model_dir = seg_model_dir
         seg_model_path = os.path.join(seg_model_dir, "roundmeter")
         self.segmenter = pdx.load_model(seg_model_path)
+        self.CIRCLE_CENTER = [256, 256]
+        self.CIRCLE_RADIUS = 250
 
     def decode(self, img_file):
         """图像解码
@@ -276,7 +274,7 @@ class MeterReader:
             elif det_result == "squaremeter":
                 seg_model_path = os.path.join(self.seg_model_dir, "squaremeter")
                 self.segmenter = pdx.load_model(seg_model_path)
-                self.setup(det_result)
+                self.setup(det_result) # 非圆形表盘的基础设置需要改变
                 result = self.segmenter.predict(batch)
             seg_results.extend(result)
         return seg_results
@@ -329,9 +327,9 @@ class MeterReader:
                 for col in range(RECTANGLE_WIDTH):
                     theta = PI * 2 * (col + 1) / RECTANGLE_WIDTH
                     # 矩形从上往下对应圆形从外到内
-                    rho = CIRCLE_RADIUS - row - 1
-                    y = int(CIRCLE_CENTER[0] + rho * math.cos(theta) + 0.5)
-                    x = int(CIRCLE_CENTER[1] - rho * math.sin(theta) + 0.5)
+                    rho = self.CIRCLE_RADIUS - row - 1
+                    y = int(self.CIRCLE_CENTER[0] + rho * math.cos(theta) + 0.5)
+                    x = int(self.CIRCLE_CENTER[1] - rho * math.sin(theta) + 0.5)
                     if y < METER_SHAPE[1] and x < METER_SHAPE[0]:
                         rectangle_meter[row, col] = label_map[y, x]
             rectangle_meters.append(rectangle_meter)
@@ -607,9 +605,9 @@ class MeterReader:
 
     def setup(self, det_result):
         if det_result == "squaremeter":
-            CIRCLE_CENTER = [415, 415]  # 高x宽
+            self.CIRCLE_CENTER = [415, 415]  # 高x宽
             # 方形表盘的半径
-            CIRCLE_RADIUS = 460
+            self.CIRCLE_RADIUS = 460
 
 
     def predict(self,
