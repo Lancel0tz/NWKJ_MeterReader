@@ -284,6 +284,8 @@ def predict(self,
     img = self.decode(img_file)
     det_results = self.detector.predict(img)
     filtered_results = self.filter_bboxes(det_results, score_threshold)
+    if not filtered_results:
+        raise Exception("No meter is detected, please change another picture or view")
     sub_imgs = self.roi_crop(img, filtered_results)
     sub_imgs = self.resize(sub_imgs, METER_SHAPE)
     seg_results = self.seg_predict(self.segmenter, sub_imgs,
