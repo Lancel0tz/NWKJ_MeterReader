@@ -1,102 +1,102 @@
-# 工业指针型表计读数
+# Industrial Meter Reading via Image Processing
 
-## <h2 id="1">1 项目说明</h2>
+## 1. Project Overview
 
-在电力能源厂区需要定期监测表计读数，以保证设备正常运行及厂区安全。但厂区分布分散，人工巡检耗时长，无法实时监测表计，且部分工作环境危险导致人工巡检无法触达。针对上述问题，希望通过摄像头拍照->智能读数的方式高效地完成此任务。
-本项目基于paddlex，readmeter案例进行优化升级。
+In power and energy plants, it's essential to regularly monitor meter readings to ensure equipment operates smoothly and to maintain safety. However, plant sites are often spread out, making manual inspections time-consuming and not always feasible in real-time. Moreover, some areas may pose dangers that prevent manual access. To address these challenges, we aim to efficiently complete this task by using a camera-to-smart reading system. This project enhances the PaddleX-based readmeter example.
 
-为实现智能读数，我们采取目标检测->语义分割->读数后处理的方案：
+Our approach involves three stages: target detection, semantic segmentation, and post-processing of readings:
 
-* 第一步，使用目标检测模型将表计按大类分类，并定位出图像中的表计；
-* 第二步，使用语义分割模型将各表计的指针和刻度分割出来；
-* 第三步，根据指针的相对位置和预知的量程计算出各表计的读数。
+- **First**, a target detection model categorizes and locates meters in images.
+- **Second**, a semantic segmentation model identifies meter pointers and scales within each located meter.
+- **Third**, the readings are calculated based on the relative positions of pointers using pre-known ranges.
 
-整个方案的流程如下所示：
+The overall workflow is illustrated below:
 
-<div align="center">
-<img src="images/process.jpg"  width = "800" />     
-</div>
+![Process Flow](images/process.jpg)
 
+## 2. Data Preparation
 
-## <h2 id="2">2 数据准备</h2>
+Due to limited data collection, this project utilizes publicly available datasets from Baidu Paddle for meter detection, pointer and scale segmentation, and test images (without annotations) for pre-training, followed by fine-tuning with our dataset. The datasets used are as follows:
 
-由于客观原因，数据采集量较少，本项目使用百度paddle的表计公开的表计检测数据集、指针和刻度分割数据集、表计测试图片（只有图片无真值标注）进行预训练并在此基础上加入自己的数据集,并使用进行 **Fine Tune**。所使用的公开数据集如下：
-
-| 表计测试图片                                                 | 表计检测数据集                                               | 指针和刻度分割数据集                                         |
-| ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| Test Images                                               | Detection Dataset                                        | Segmentation Dataset                                      |
+| --------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
 | [meter_test](https://bj.bcebos.com/paddlex/examples/meter_reader/datasets/meter_test.tar.gz) | [meter_det](https://bj.bcebos.com/paddlex/examples/meter_reader/datasets/meter_det.tar.gz) | [meter_seg](https://bj.bcebos.com/paddlex/examples/meter_reader/datasets/meter_seg.tar.gz) |
 
-* **Fine Tune** 使用的目标检测数据集的在项目中文件夹内容如下：
+### Fine-tuning details:
 
-训练集有188张图片，测试集有21张图片。
+- **Detection Dataset Folder Structure:**
 
-```
+  - **Training set**: 188 images
+  - **Test set**: 21 images
+
+```plaintext
 dataset_det/
-|-- annotations/ # 标注文件所在文件夹
-|   |-- instance_train.json # 训练集标注文件
-|   |-- instance_test.json # 测试集标注文件
-|-- test/ # 测试图片所在文件夹
-|   |-- 4.jpg # 测试集图片
-|   |-- ... ...
-|-- train/ # 训练图片所在文件夹
-|   |-- 1.jpg # 训练集图片
-|   |-- ... ...
+|-- annotations/ # Annotation folder
+|   |-- instance_train.json # Training set annotations
+|   |-- instance_test.json # Test set annotations
+|-- test/ # Test images folder
+|   |-- 4.jpg
+|   |-- ...
+|-- train/ # Training images folder
+|   |-- 1.jpg
+|   |-- ...
 
 ```
-* **Fine Tune** 使用的指针和刻度分割数据集的文件夹内容如下：
-
-训练集有374张图片，测试集有40张图片。
+- **Segmentation Dataset Folder Structure:**
+- 
+  - **Training set**: 374 images
+  - **Test set**: 40 images
 
 ```
 dataset_seg/
-|-- annotations/ # 标注文件所在文件夹
-|   |-- train # 训练集标注图片所在文件夹
+|-- annotations/ # Annotation folder
+|   |-- train # Training set annotation images
 |   |   |-- 5.png
-|   |   |-- ... ...
-|   |-- val # 验证集合标注图片所在文件夹
+|   |   |-- ...
+|   |-- val # Validation set annotation images
 |   |   |-- 6.png
-|   |   |-- ... ...
-|-- images/ # 图片所在文件夹
-|   |-- train # 训练集图片
+|   |   |-- ...
+|-- images/ # Images folder
+|   |-- train # Training set images
 |   |   |-- 5.jpg
-|   |   |-- ... ...
-|   |-- val # 验证集图片
+|   |   |-- ...
+|   |-- val # Validation set images
 |   |   |-- 6.jpg
-|   |   |-- ... ...
-|-- labels.txt # 类别名列表
-|-- train.txt # 训练集图片列表
-|-- val.txt # 验证集图片列表
+|   |   |-- ...
+|-- labels.txt # List of class names
+|-- train.txt # Training set image list
+|-- val.txt # Validation set image list
 
 ```
 
-## <h2 id="3">3 模型选择</h2>
+## <h2 id="3">3 Model Selection</h2>
 
-PaddleX提供了丰富的视觉模型，在目标检测中提供了RCNN和YOLO系列模型，在语义分割中提供了DeepLabV3P和BiSeNetV2等模型。
+PaddleX offers a variety of vision models. For target detection, we use RCNN and YOLO series models. For semantic segmentation, models like DeepLabV3P and BiSeNetV2 are available.
 
-因最终部署场景是本地化的服务器GPU端，算力相对充足，因此在本项目中采用精度和预测性能皆优的PPYOLOV2进行表计检测。
+Given the deployment scenario on local server GPUs with substantial computational power, we choose the PPYOLOV2 for meter detection due to its superior accuracy and performance.
 
-考虑到指针和刻度均为细小区域，我们采用精度更优的DeepLabV3P进行指针和刻度的分割。
+For the fine-grained areas of pointers and scales, we opt for the high-precision DeepLabV3P for segmentation.
 
-## <h2 id="4">4 表计检测模型训练</h2>
+## <h2 id="4">4 Training the Meter Detection Model</h2>
 
-本项目中采用精度和预测性能的PPYOLOV2进行表计检测。具体代码请参考[train_detection.py](./train_detection.py)。
+The PPYOLOV2 model, known for its excellent accuracy and performance, is used for meter detection. Refer to train_detection.py for the detailed code.
 
-运行如下代码开始训练模型：
+Start the training by running the following command:
 
 ```shell
 python train_detection.py
 ```
-经过不断的参数调优，平衡数据集，迭代训练后，最优模型精度`bbox_mmap`达到99.81%：<br>
+After several iterations of parameter tuning, balancing the dataset, and iterative training, the optimal model achieves a bbox_mmap accuracy of 99.81%：<br>
 <img src='/images/det_bbox.jpg' width="425" height="330"/><br>
-平均精准率均值`mAP`达到99.82%，混淆矩阵如下图所示：<br>
+The average precision mean (mAP) reaches 99.82%, with the confusion matrix shown below:<br>
 <img src='/images/det_matrix.jpg' width="400" height="330"/>
 
 
-训练过程说明:
+Training Process Details:
 
-定义数据预处理 -> 定义数据集路径 -> 初始化模型 -> 模型训练
+Define data preprocessing -> Define dataset path -> Initialize model -> Model training
 
- * 定义数据预处理
+ * Define Data Preprocessing
 
 ```python
 train_transforms = T.Compose([
@@ -116,7 +116,7 @@ eval_transforms = T.Compose([
 ```
 
 
- * 定义数据集路径
+ * Defining the dataset path
 
 ```python
 train_dataset = pdx.datasets.CocoDetection(
@@ -130,7 +130,7 @@ eval_dataset = pdx.datasets.CocoDetection(
     transforms=eval_transforms)
 ```
 
- * 初始化模型
+ * Initialization Model
 
 ```python
 num_classes = len(train_dataset.labels)
@@ -139,7 +139,7 @@ model = pdx.det.PPYOLOv2(
 
 ```
 
-* 模型训练
+* Model training
 
 ```python
 model.train(
@@ -158,26 +158,27 @@ model.train(
     use_vdl=True)
 ```
 
-## <h2 id="5">5 指针和刻度分割模型训练</h2>
+## <h2 id="5">5 Pointer and scale segmentation model training</h2>
 
-本项目中采用精度更优的DeepLabV3P进行指针和刻度的分割。具体代码请参考[train_segmentation.py](./train_segmentation.py)。
+In this project, DeepLabV3P with better accuracy is used for pointer and scale segmentation. Please refer to [train_segmentation.py](. /train_segmentation.py).
 
-运行如下代码开始训练模型：
+Run the following code to start training the model:
+
 
 ```shell
 python train_segmentation.py
 ```
-训练结束后，最优模型精度`miou`达84.09。<br>
+At the end of training, the optimal model accuracy `miou` reaches 84.09.<br>
 <img src='/images/seg_miou.jpg' width="425" height="330"/><br>
-平均精准率均值`mAcc`达到99.21%，混淆矩阵如下图所示：<br>
+The average precision rate mean `mAcc` reached 99.21% and the confusion matrix is shown below:<br>
 <img src='/images/det_matrix.jpg' width="400" height="330"/>
 
 
-训练过程说明:
+Description of the training process.
 
-定义数据预处理 -> 定义数据集路径 -> 初始化模型 -> 模型训练
+Define data preprocessing -> Define dataset path -> Initialize model -> Model training
 
-* 定义数据预处理
+* Define data preprocessing
 
 ```python
 train_transforms = T.Compose([
@@ -195,7 +196,7 @@ eval_transforms = T.Compose([
 ```
 
 
-* 定义数据集路径
+* Defining data set paths
 
 ```python
 train_dataset = pdx.datasets.SegDataset(
@@ -213,7 +214,7 @@ eval_dataset = pdx.datasets.SegDataset(
     shuffle=False)
 ```
 
-* 初始化模型
+* Initialization model
 
 ```python
 num_classes = len(train_dataset.labels)
@@ -221,7 +222,7 @@ model = pdx.seg.DeepLabV3P(num_classes=num_classes, backbone='ResNet50_vd', use_
 
 ```
 
-* 模型训练
+* Model training
 
 ```python
 model.train(
@@ -236,31 +237,31 @@ model.train(
     use_vdl=True)
 ```
 
-## <h2 id="6">6 模型预测</h2>
+## <h2 id="6">6 **Model prediction**</h2>
 
-运行如下代码：
+Run the following code:
 
 ```shell
 python reader_infer.py --det_model_dir output/ppyolov2_r50vd_dcn/best_model --seg_model_dir output/deeplabv3p_r50vd/best_model/ --image meter_det/test/20190822_105.jpg
 ```
 
-则会在终端上输出信息：
+Then a message will be output on the terminal:
 
 ```
 Meter 1: Type=squaremeter, Reading=-10.0
 Meter 2: Type=roundmeter, Reading=-0.005
 2023-08-03 15:04:55 [INFO]      The visualized result is saved at ./output/result\visualize_1691046295851.jpg
 ```
-预测结果如下：
+The results of the projections are shown below:
 
 <div align="center">
 <img src="./images/visualize_1692084523583.jpg"  width = "400" /><br>
 <img src="./images/visualize_1692080401439.jpg"  width = "400" />              </div>
 
 
-我们看下预测代码中的预测流程：
+Let's look at the prediction flow in the prediction code:
 
-图像解码 -> 检测表计 -> 过滤检测框 -> 提取检测框所在图像区域 -> 图像缩放 -> 指针和刻度分割 -> 读数后处理 -> 打印读数 -> 可视化预测结果
+Image Decoding -> Detection Meter -> Filtering Detection Frames -> Extracting the region of the image where the detection frames are located -> Image Scaling -> Segmentation of Pointers and Scales -> Post-reading Processing -> Printing Readings -> Visualizing Prediction Results
 
 ```python
 def predict(self,
@@ -271,15 +272,15 @@ def predict(self,
             score_threshold=0.5,
             seg_batch_size=2):
 
-    """检测图像中的表盘，而后分割出各表盘中的指针和刻度，对分割结果进行读数后处理后得到各表盘的读数。
+    """Detect the dials in the image, and then segment the pointers and scales in each dial, and get the readings of each dial after processing the readings of the segmentation result.
 
-        参数：
-            img_file (str)：待预测的图片路径。
-            save_dir (str): 可视化结果的保存路径。
-            use_erode (bool, optional): 是否对分割预测结果做图像腐蚀。默认值：True。
-            erode_kernel (int, optional): 图像腐蚀的卷积核大小。默认值: 4。
-            score_threshold (float, optional): 用于滤除检测框的置信度阈值。默认值：0.5。
-            seg_batch_size (int, optional)：分割模型前向推理一次时输入表盘图像的批量大小。默认值为：2。
+        Parameters:
+            img_file (str): path of the image to be predicted.
+            save_dir (str): path to save the visualization result.
+            use_erode (bool, optional): if or not do image erode on the segmentation prediction result. Default: True.
+            erode_kernel (int, optional): the size of the convolution kernel for image erosion. Default value: 4.
+            score_threshold (float, optional): confidence threshold for filtering out detection frames. Default value: 0.5.
+            seg_batch_size (int, optional): batch size of the input dial image when the segmentation model is forward reasoned once. Default value: 2.
     """
 
     img = self.decode(img_file)
@@ -298,21 +299,21 @@ def predict(self,
 
 ```
 
-## <h2 id="7">7 模型导出</h2>
+## <h2 id="7">7 Model Export</h2>
 
-在训练过程中模型被保存在了`output`文件夹，此时模型格式还是动态图格式，需要导出成静态图格式才可以进行下一步部署。
+During the training process the model is saved in the `output` folder, at this point the model format is still in dynamic graph format, and needs to be exported to static graph format for the next deployment step.
 
-运行如下命令将表计检测模型导出，会自动在`meter_det_model`文件夹下创建一个`inference_model`的文件夹，用来存放静态图格式的检测模型。
+Run the following command to export the meter detection model, it will automatically create a `inference_model` folder under the `meter_det_model` folder, which will be used to store the detection model in static graph format.
 
-```python
+``python
 
 paddlex --export_inference --model_dir=output/ppyolov2_r50vd_dcn/best_model --save_dir=meter_det_model
 
 ```
 
-运行如下命令将刻度和指针分割模型导出，会自动在`meter_seg_model`文件夹下创建一个`inference_model`的文件夹，用来存放静态图格式的分割模型。
+Running the following command to export the scale and pointer segmentation model will automatically create a folder `inference_model` under the `meter_seg_model` folder, which will be used to store the segmentation model in static graph format.
 
-```python
+``python
 
 paddlex --export_inference --model_dir=output/deeplabv3p_r50vd/best_model --save_dir=meter_seg_model
-```
+``
