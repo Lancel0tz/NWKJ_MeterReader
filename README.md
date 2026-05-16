@@ -12,7 +12,7 @@ Our approach involves three stages: target detection, semantic segmentation, and
 
 The overall workflow is illustrated below:
 
-![Process Flow](images/process.jpg)
+![Process Flow](images/process.png)
 
 ## 2. Data Preparation
 
